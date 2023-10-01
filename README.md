@@ -1,4 +1,4 @@
-# tunami-safety-calc-site
+# tsunami-safety-calc-site
 「津波に対する安全性を確かめる方法」の試験実装
 
 https://mghs15.github.io/tsunami-safety-calc-site/
