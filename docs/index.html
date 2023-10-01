@@ -61,8 +61,8 @@ div.title {
   <option value="1.5">1.5</option>
 </select><br>
 <!--建物長辺(m):<input type="number" id="B" name="B" min="6" max="42" value="42"/><br>-->
-建物短辺(6～42m):<input type="number" id="D" name="D" min="6" max="42" value="42" onchange="calcr()"/><br>
-階数（2～11階）:<input type="number" id="N" name="N" min="2" max="11"  value="11" onchange="calcr()"/><br>
+建物短辺：<input type="number" id="D" name="D" min="6" max="42" value="42" onchange="calcr()"/>（許容浸水深表の範囲は6～42 m）<br>
+階数：<input type="number" id="N" name="N" min="2" max="11"  value="11" onchange="calcr()"/>（許容浸水深表の範囲は2～11階）<br>
 開口率：<select id="x" name="x" onchange="calcr()"> // 開口波力低減率
   <option value="0.85">0.15</option>
   <option value="0.70">0.3</option>
@@ -76,32 +76,34 @@ div.title {
 <div id='result'></div>
 <div id='table'></div>
 <div class='memo'>
-<div class="title">#課題等</div>
+<div class="title">#ノート</div>
 ※倒壊限界、滑動限界の他、転倒限界もあるが、3次方程式を解く必要がある。
-事務連絡別紙によれば、開口率0.3において、『検討した条件範囲(建物階数 3F～11F，建物幅の最小値 (6 m～42 m)ではいずれの水深係数の検討においても
-滑動限界浸水深を条件とした限界浸水深によって許容浸水深が決定した。』とのことなので省略している。
+事務連絡別紙によれば、開口率0.3において、『表中で検討した条件範囲(建物階数 3F～11Ｆ，建物幅の最小値 (6m～42m)では
+いずれの水深係数の検討においても滑動限界浸水深を条件とした限界浸水深によって許容浸水深が決定した』とのことなので省略している。
 （ただし、開口率0.15においても滑動限界浸水深により決定されるかは明言されていない。本サイトでも開口率0.15の場合を検証しているわけではないので、改めて水深表での確認が必要。）
 <br>
-※倒壊限界の数値が一部許容浸水深表の表に合わない場合がある（安全側に0.1 m ずれる）
+※倒壊限界の数値が一部許容浸水深表の表に合わない場合がある（安全側に0.1 m ずれる）。
+<br>
+※長辺は、津波の作用（津波水平力等）と建物の耐力（滑動耐力等）の両方に寄与するので打ち消し合い、結果として、建物の安全性としては短辺の寄与だけが残るようである。
 <div>
 
 
 <script>
 
 const config = {
-  a: null, // 水深係数※
-  B: null, // 建物長辺※
-  D: null, // 建物短辺※
-  N: null, // 階数（3～12階）
+  a: null,  // 水深係数
+  B: null,  // 建物長辺
+  D: null,  // 建物短辺
+  N: null,  // 階数（3～12階）
   
-  H: 3.5, // 建物階高 
+  H: 3.5,   // 建物階高 
   w: 13/9.805, // 単位面積床質量 13 kN/m2 
   
-  x: null, // 開口波力低減率 (1 - 開口率)
+  x: null,  // 開口波力低減率 (1 - 開口率)
   
   C0: 0.30, // 層せん断力係数
-  m: 0.4, // すべり摩擦係数
-  r: 1, // 海水密度
+  m: 0.4,   // すべり摩擦係数
+  r: 1,     // 海水密度
   g: 9.805, // 重力加速度
 };
 
@@ -135,15 +137,15 @@ calcr = () => {
 const calc = (a, B, D, N, x) => {
   
   const val = {
-    a: a, // 水深係数※
-    B: B, // 建物長辺※
-    D: D, // 建物短辺※
-    N: N, // 階数（3～12階）
+    a: a,        // 水深係数※
+    B: B,        // 建物長辺※
+    D: D,        // 建物短辺※
+    N: N,        // 階数（3～12階）
     
     H: config.H, // 建物階高 
     w: config.w, // 単位面積床質量
     
-    x: x, // 開口波力低減率 (1 - 開口率)
+    x: x,        // 開口波力低減率 (1 - 開口率)
     
     C0: config.C0, // 層せん断力係数
     m: config.m, // すべり摩擦係数
@@ -208,7 +210,7 @@ const calcKatsudo = (val) => {
 * 簡易表
 ***********************************/
 
-const  structuralize = (table) => {
+const structuralize = (table) => {
   console.log(table);
   const lines = table.split(/\n/g);
   const res = [];
@@ -227,7 +229,7 @@ const showTable = (a_str, x_str, D, N) => {
   const tableName = table[x_str][a_str];
   
   let tableHTML = `<div class="title">#許容浸水深表（浸水係数 ${a_str}、開口率 ${Math.floor(100-+x_str*100)/100}）</div>
-  <table><tr>
+  <table><tr style="background-color:#EEEEEE;">
   <th>短辺</th><th>2F</th><th>3F</th><th>4F</th><th>5F</th><th>6F</th><th>7F</th><th>8F</th><th>9F</th><th>10F</th><th>11F</th>
   </tr>
   `;
@@ -241,7 +243,6 @@ const showTable = (a_str, x_str, D, N) => {
   for(let i=0; i<data.length; i++){
     
     const c = data[i];
-    console.log(c, D);
     
     let highlightedRowFlag = false;
     if((+c.width==D) || (+c.width < D && data[i+1] && +data[i+1].width > D)){
@@ -251,7 +252,7 @@ const showTable = (a_str, x_str, D, N) => {
       tableHTML += `<tr>`;
       highlightedRowFlag = false;
     }
-    tableHTML += `<td>${c.width} m</td>`;
+    tableHTML += `<td class="strong">${c.width}</td>`;
     
     for(let j=0; j<c.data.length; j++){
       const cell = c.data[j];
