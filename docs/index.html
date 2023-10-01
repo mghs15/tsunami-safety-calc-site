@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8' />
+<title>津波に対する安全性（倒壊、転倒及び滑動）を確かめる方法</title>
+<meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+<style>
+body { 
+  margin: 1em;
+  padding:0;
+}
+
+#menu {
+  padding: 4px;
+}
+#result {
+  padding: 4px;
+  background-color: #EEFFFF;
+}
+#table table{
+  margin: 4px;
+  border-collapse: collapse;
+}
+#table td, #table th {
+  border: solid 1px #000000;
+  width: 3em;
+}
+
+#table .highlighted {
+  background-color: #EEEEFF;
+}
+
+div.memo {
+  padding: 4px;
+}
+
+div.title {
+  font-weight: bold;
+}
+
+.strong {
+  font-weight: bold;
+}
+
+</style>
+</head>
+<body>
+
+<h1>「津波に対する安全性を確かめる方法」の試験実装</h1>
+
+<div class='memo'>
+本サイトは国土交通省住宅局の事務連絡「<a href="https://www.mlit.go.jp/sogoseisaku/point/content/001397830.pdf" target="_blank">許容浸水深表による津波に対する安全性を確かめる方法について</a>」
+を参照して作成したものである。実際に津波に対する安全性を確かめる際は、当該事務連絡を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。
+<div>
+
+<div id='menu'>
+<div class="title">#条件設定</div>
+水深係数：<select id="a" name="a" onchange="calcr()">
+  <option value="3.0">3</option>
+  <option value="2.0">2</option>
+  <option value="1.5">1.5</option>
+</select><br>
+<!--建物長辺(m):<input type="number" id="B" name="B" min="6" max="42" value="42"/><br>-->
+建物短辺(6～42m):<input type="number" id="D" name="D" min="6" max="42" value="42" onchange="calcr()"/><br>
+階数（2～11階）:<input type="number" id="N" name="N" min="2" max="11"  value="11" onchange="calcr()"/><br>
+開口率：<select id="x" name="x" onchange="calcr()"> // 開口波力低減率
+  <option value="0.85">0.15</option>
+  <option value="0.70">0.3</option>
+</select><br>
+
+<!--
+<button onclick="calcr()">計算</button>
+-->
+
+</div>
+<div id='result'></div>
+<div id='table'></div>
+<div class='memo'>
+<div class="title">#課題等</div>
+※倒壊限界、滑動限界の他、転倒限界もあるが、3次方程式を解く必要がある。
+事務連絡別紙によれば、開口率0.3において、『検討した条件範囲(建物階数 3F～11F，建物幅の最小値 (6 m～42 m)ではいずれの水深係数の検討においても
+滑動限界浸水深を条件とした限界浸水深によって許容浸水深が決定した。』とのことなので省略している。
+（ただし、開口率0.15においても滑動限界浸水深により決定されるかは明言されていない。本サイトでも開口率0.15の場合を検証しているわけではないので、改めて水深表での確認が必要。）
+<br>
+※倒壊限界の数値が一部許容浸水深表の表に合わない場合がある（安全側に0.1 m ずれる）
+<div>
+
+
+<script>
+
+const config = {
+  a: null, // 水深係数※
+  B: null, // 建物長辺※
+  D: null, // 建物短辺※
+  N: null, // 階数（3～12階）
+  
+  H: 3.5, // 建物階高 
+  w: 13/9.805, // 単位面積床質量 13 kN/m2 
+  
+  x: null, // 開口波力低減率 (1 - 開口率)
+  
+  C0: 0.30, // 層せん断力係数
+  m: 0.4, // すべり摩擦係数
+  r: 1, // 海水密度
+  g: 9.805, // 重力加速度
+};
+
+const getInputValues = () => {
+  
+  //選択肢をまとめて取得する
+  const res = {
+    a : +document.getElementById("a").value,
+    //B : +document.getElementById("B").value,
+    D : +document.getElementById("D").value,
+    N : +document.getElementById("N").value,
+    
+    x:  +document.getElementById("x").value,
+  };
+  
+  return res;
+  
+};
+
+calcr = () => {
+  const iv = getInputValues();
+  calc(iv.a, iv.B, iv.D, iv.N, iv.x);
+  showTable(
+    document.getElementById("a").value, 
+    document.getElementById("x").value,
+    iv.D, iv.N
+  );
+
+};
+
+const calc = (a, B, D, N, x) => {
+  
+  const val = {
+    a: a, // 水深係数※
+    B: B, // 建物長辺※
+    D: D, // 建物短辺※
+    N: N, // 階数（3～12階）
+    
+    H: config.H, // 建物階高 
+    w: config.w, // 単位面積床質量
+    
+    x: x, // 開口波力低減率 (1 - 開口率)
+    
+    C0: config.C0, // 層せん断力係数
+    m: config.m, // すべり摩擦係数
+    r: config.r, // 海水密度
+    g: config.g, // 重力加速度
+    NH: N * config.H , // 建物高さ
+  };
+  
+  
+  const tokaiH = calcTokai(val);
+  const katsudoH = calcKatsudo(val);
+  
+  document.getElementById("result").innerHTML = `<div class="title">#許容浸水深</div><ul>
+    <li>倒壊限界 許容浸水深：${Math.floor(tokaiH  *10)/10} [m]</li>
+    <li>滑動限界 許容浸水深：<strong style="color:red;">${Math.floor(katsudoH*10)/10}</strong> [m]</li>
+   <il>
+  `;
+  
+
+}
+
+const calcTokai = (val) => {
+  // 建物高さが波圧高さを上回る場合
+  const h1 = (1/val.a) * (Math.sqrt((2 * val.C0 * val.w * val.N * val.D)/(val.x * val.r)) + (val.H/2));
+  // 波圧高さが建物高さを上回る場合 
+  const h2 = (1/(2 * val.a)) 
+           * (
+              ((2 * val.C0 * val.w * val.N * val.D)/(val.r * val.x * (val.N - (1/2)) * val.H))
+              + (val.H/2) + (val.N * val.H)
+             );
+  
+  if(h1 * val.a < val.NH){
+    return h1;
+  }else{
+    return h2;
+  }
+}
+
+const calcKatsudo = (val) => {
+  // 建物高さが波圧高さを上回る場合
+  const _P11 = val.m * val.D * val.r;
+  const _P12 = (val.m**2)*(val.D**2)*(val.r**2);
+  const _P13 = 2*(val.a**2)*val.x*val.r*val.m*val.D*val.w*(val.N+1);
+  const _P14 = (val.a**2) * val.x * val.r;
+  
+  const _P15 = Math.sqrt(_P12 + _P13);
+  
+  const h1 = (-_P11 + _P15) / _P14;
+             
+  // 波圧高さが建物高さを上回る場合 
+  const h2 = ((2*val.m*val.w*(val.N+1)*val.D) + ((val.N**2)*(val.H**2)*val.r*val.x))
+            /((2*val.a*val.N*val.H*val.r*val.x) + (2*val.m*val.D*val.r));
+  
+  if(h1 * val.a < val.NH){
+    return h1;
+  }else{
+    return h2;
+  }
+}
+
+/***********************************
+* 簡易表
+***********************************/
+
+const  structuralize = (table) => {
+  console.log(table);
+  const lines = table.split(/\n/g);
+  const res = [];
+  lines.forEach( line => {
+    if(!line) return;
+    const dat = line.split(/\s+\(m\)\s+/g);
+    res.push({
+      width: dat[0],
+      data: dat[1].split(/\s/)
+    });
+  });
+  return res;
+}
+
+const showTable = (a_str, x_str, D, N) => {
+  const tableName = table[x_str][a_str];
+  
+  let tableHTML = `<div class="title">#許容浸水深表（浸水係数 ${a_str}、開口率 ${Math.floor(100-+x_str*100)/100}）</div>
+  <table><tr>
+  <th>短辺</th><th>2F</th><th>3F</th><th>4F</th><th>5F</th><th>6F</th><th>7F</th><th>8F</th><th>9F</th><th>10F</th><th>11F</th>
+  </tr>
+  `;
+  
+  const data = structuralize(tableName);
+  console.log(data);
+  
+  const isRowHighlight = false;
+  
+  
+  for(let i=0; i<data.length; i++){
+    
+    const c = data[i];
+    console.log(c, D);
+    
+    let highlightedRowFlag = false;
+    if((+c.width==D) || (+c.width < D && data[i+1] && +data[i+1].width > D)){
+      tableHTML += `<tr class="highlighted">`;
+      highlightedRowFlag = true;
+    }else{
+      tableHTML += `<tr>`;
+      highlightedRowFlag = false;
+    }
+    tableHTML += `<td>${c.width} m</td>`;
+    
+    for(let j=0; j<c.data.length; j++){
+      const cell = c.data[j];
+      if(j==N-2){
+        if(highlightedRowFlag){
+          tableHTML += `<td class="highlighted strong">${cell}</td>`;
+        }else{
+          tableHTML += `<td class="highlighted">${cell}</td>`;
+        }
+        //tableHTML += `<td class="highlighted">${cell}</td>`;
+      }else{
+        tableHTML += `<td>${cell}</td>`;
+      }
+    };
+    tableHTML += `</tr>`;
+    
+  };
+  
+  document.getElementById("table").innerHTML = tableHTML;
+  
+};
+
+
+
+// 2F 3F 4F 5F 6F 7F 8F 9F 10F 11F
+
+const table = {
+"0.85":{
+"3.0" : `
+6 (m) 1.2 1.5 1.7 1.9 2.1 2.2 2.4 2.5 2.7 2.8
+7 (m) 1.3 1.6 1.8 2.0 2.2 2.4 2.6 2.7 2.9 3.0
+8 (m) 1.4 1.7 1.9 2.1 2.3 2.5 2.7 2.9 3.0 3.2
+9 (m) 1.5 1.8 2.0 2.3 2.5 2.7 2.9 3.0 3.2 3.4
+10 (m) 1.5 1.8 2.1 2.4 2.6 2.8 3.0 3.2 3.4 3.5
+11 (m) 1.6 1.9 2.2 2.5 2.7 2.9 3.1 3.3 3.5 3.7
+12 (m) 1.6 2.0 2.3 2.5 2.8 3.0 3.2 3.4 3.6 3.8
+15 (m) 1.8 2.2 2.5 2.8 3.1 3.3 3.6 3.8 4.0 4.2
+18 (m) 1.9 2.3 2.7 3.0 3.3 3.6 3.8 4.1 4.3 4.6
+24 (m) 2.1 2.6 3.0 3.3 3.7 4.0 4.3 4.6 4.9 5.1
+30 (m) 2.2 2.8 3.2 3.6 4.0 4.4 4.7 5.0 5.3 5.6
+36 (m) 2.4 2.9 3.4 3.9 4.3 4.7 5.0 5.4 5.7 6.0
+42 (m) 2.5 3.1 3.6 4.1 4.5 4.9 5.3 5.7 6.1 6.4`,
+
+"2.0" : `
+6 (m) 1.7 2.1 2.4 2.7 2.9 3.2 3.4 3.6 3.8 4.0
+7 (m) 1.8 2.2 2.5 2.8 3.1 3.4 3.6 3.9 4.1 4.3
+8 (m) 1.9 2.3 2.7 3.0 3.3 3.6 3.8 4.1 4.3 4.6
+9 (m) 2.0 2.4 2.8 3.1 3.4 3.7 4.0 4.3 4.5 4.8
+10 (m) 2.1 2.5 2.9 3.3 3.6 3.9 4.2 4.5 4.7 5.0
+11 (m) 2.1 2.6 3.0 3.4 3.7 4.1 4.4 4.7 4.9 5.2
+12 (m) 2.2 2.7 3.1 3.5 3.8 4.2 4.5 4.8 5.1 5.4
+15 (m) 2.3 2.9 3.3 3.8 4.2 4.6 4.9 5.2 5.6 5.9
+18 (m) 2.5 3.0 3.5 4.0 4.4 4.9 5.3 5.6 6.0 6.3
+24 (m) 2.6 3.3 3.9 4.4 4.9 5.4 5.8 6.2 6.6 7.0
+30 (m) 2.8 3.5 4.1 4.7 5.3 5.8 6.3 6.7 7.2 7.6
+36 (m) 2.9 3.6 4.3 5.0 5.5 6.1 6.6 7.1 7.6 8.1
+42 (m) 3.0 3.8 4.5 5.2 5.8 6.4 6.9 7.5 8.0 8.5`,
+
+"1.5" : `
+6 (m) 2.1 2.6 3.0 3.3 3.7 4.0 4.3 4.6 4.9 5.1
+7 (m) 2.2 2.7 3.1 3.5 3.9 4.2 4.6 4.9 5.2 5.5
+8 (m) 2.3 2.8 3.3 3.7 4.1 4.5 4.8 5.1 5.5 5.8
+9 (m) 2.4 2.9 3.4 3.9 4.3 4.7 5.0 5.4 5.7 6.0
+10 (m) 2.4 3.0 3.5 4.0 4.4 4.8 5.2 5.6 5.9 6.3
+11 (m) 2.5 3.1 3.6 4.1 4.6 5.0 5.4 5.8 6.2 6.5
+12 (m) 2.6 3.2 3.7 4.2 4.7 5.2 5.6 6.0 6.4 6.7
+15 (m) 2.7 3.4 4.0 4.5 5.1 5.6 6.0 6.5 6.9 7.3
+18 (m) 2.8 3.5 4.2 4.8 5.4 5.9 6.4 6.9 7.3 7.8
+24 (m) 3.0 3.8 4.5 5.2 5.8 6.4 7.0 7.5 8.0 8.5
+30 (m) 3.1 4.0 4.7 5.5 6.2 6.8 7.4 8.0 8.6 9.1
+36 (m) 3.2 4.1 4.9 5.7 6.4 7.1 7.8 8.4 9.0 9.6
+42 (m) 3.3 4.2 5.1 5.9 6.7 7.4 8.1 8.8 9.4 10.1`
+},
+
+"0.70":{
+"3.0" : `
+6 (m) 1.4 1.6 1.8 2.1 2.3 2.4 2.6 2.8 2.9 3.1
+7 (m) 1.4 1.7 2.0 2.2 2.4 2.6 2.8 3.0 3.1 3.3
+8 (m) 1.5 1.8 2.1 2.3 2.6 2.8 3.0 3.1 3.3 3.5
+9 (m) 1.6 1.9 2.2 2.4 2.7 2.9 3.1 3.3 3.5 3.7
+10 (m) 1.7 2.0 2.3 2.6 2.8 3.0 3.3 3.5 3.7 3.9
+11 (m) 1.7 2.1 2.4 2.7 2.9 3.2 3.4 3.6 3.8 4.0
+12 (m) 1.8 2.1 2.5 2.8 3.0 3.3 3.5 3.7 4.0 4.2
+15 (m) 1.9 2.3 2.7 3.0 3.3 3.6 3.9 4.1 4.4 4.6
+18 (m) 2.0 2.5 2.9 3.2 3.6 3.9 4.2 4.4 4.7 4.9
+24 (m) 2.2 2.7 3.2 3.6 4.0 4.3 4.6 5.0 5.3 5.6
+30 (m) 2.4 2.9 3.4 3.9 4.3 4.7 5.1 5.4 5.7 6.1
+36 (m) 2.5 3.1 3.6 4.1 4.6 5.0 5.4 5.8 6.1 6.5
+42 (m) 2.6 3.2 3.8 4.3 4.8 5.3 5.7 6.1 6.5 6.9`,
+
+"2.0" : `
+6 (m) 1.8 2.2 2.6 2.9 3.2 3.4 3.7 3.9 4.2 4.4
+7 (m) 1.9 2.4 2.7 3.1 3.4 3.7 3.9 4.2 4.4 4.7
+8 (m) 2.0 2.5 2.9 3.2 3.6 3.9 4.2 4.4 4.7 4.9
+9 (m) 2.1 2.6 3.0 3.4 3.7 4.0 4.4 4.6 4.9 5.2
+10 (m) 2.2 2.7 3.1 3.5 3.9 4.2 4.5 4.8 5.1 5.4
+11 (m) 2.2 2.8 3.2 3.6 4.0 4.4 4.7 5.0 5.3 5.6
+12 (m) 2.3 2.8 3.3 3.7 4.1 4.5 4.9 5.2 5.5 5.8
+15 (m) 2.5 3.0 3.6 4.0 4.5 4.9 5.3 5.6 6.0 6.3
+18 (m) 2.6 3.2 3.8 4.3 4.8 5.2 5.6 6.0 6.4 6.8
+24 (m) 2.8 3.5 4.1 4.7 5.2 5.7 6.2 6.7 7.1 7.5
+30 (m) 2.9 3.7 4.3 5.0 5.6 6.1 6.6 7.2 7.6 8.1
+36 (m) 3.0 3.8 4.5 5.2 5.8 6.4 7.0 7.6 8.1 8.6
+42 (m) 3.1 3.9 4.7 5.4 6.1 6.7 7.3 7.9 8.5 9.0`,
+
+"1.5" : `
+6 (m) 2.2 2.7 3.2 3.6 4.0 4.3 4.6 5.0 5.3 5.6
+7 (m) 2.3 2.9 3.3 3.8 4.2 4.6 4.9 5.3 5.6 5.9
+8 (m) 2.4 3.0 3.5 4.0 4.4 4.8 5.2 5.5 5.9 6.2
+9 (m) 2.5 3.1 3.6 4.1 4.6 5.0 5.4 5.8 6.1 6.5
+10 (m) 2.6 3.2 3.7 4.3 4.7 5.2 5.6 6.0 6.4 6.8
+11 (m) 2.6 3.3 3.9 4.4 4.9 5.3 5.8 6.2 6.6 7.0
+12 (m) 2.7 3.4 4.0 4.5 5.0 5.5 6.0 6.4 6.8 7.2
+15 (m) 2.8 3.6 4.2 4.8 5.4 5.9 6.4 6.9 7.3 7.8
+18 (m) 2.9 3.7 4.4 5.1 5.7 6.2 6.8 7.3 7.8 8.3
+24 (m) 3.1 3.9 4.7 5.4 6.1 6.8 7.4 8.0 8.5 9.1
+30 (m) 3.2 4.1 4.9 5.7 6.5 7.2 7.8 8.5 9.1 9.7
+36 (m) 3.3 4.2 5.1 5.9 6.7 7.5 8.2 8.9 9.5 10.2
+42 (m) 3.4 4.3 5.3 6.1 6.9 7.7 8.5 9.2 9.9 10.6`
+}
+};
+
+
+window.onload = calcr();
+</script>
+
+</body>
+</html>
