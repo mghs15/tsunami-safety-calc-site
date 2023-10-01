@@ -4,14 +4,43 @@
 <meta charset='utf-8' />
 <title>津波に対する安全性（倒壊、転倒及び滑動）を確かめる方法</title>
 <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+<script src='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js'></script>
+<link href='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css' rel='stylesheet' />
+<script src="https://unpkg.com/pmtiles@2.5.0/dist/index.js"></script>
+<script src="./measure.js"></script>
 <style>
 body { 
   margin: 1em;
   padding:0;
 }
 
+#panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 4px;
+}
+
+@media screen and (max-width: 640px) {
+  #panel {
+    display: grid;
+  grid-template-columns: 1fr;
+    grid-template-rows: auto 300px;
+    grid-gap: 4px;
+  }
+}
+
+#map {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
 #menu {
   padding: 4px;
+}
+#shinsui {
+  padding: 4px;
+  background-color: #FFEEEE;
 }
 #result {
   padding: 4px;
@@ -50,32 +79,44 @@ div.title {
 
 <div class='memo'>
 本サイトは国土交通省住宅局の事務連絡「<a href="https://www.mlit.go.jp/sogoseisaku/point/content/001397830.pdf" target="_blank">許容浸水深表による津波に対する安全性を確かめる方法について</a>」
-を参照して作成したものである。実際に津波に対する安全性を確かめる際は、当該事務連絡を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。<br>
-<a href="./map.html" target="_blank">地図で建物の大きさと比較する</a>
+を参照して作成したものである。実際に津波に対する安全性を確かめる際は、当該事務連絡を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。
 <div>
 
-<div id='menu'>
-<div class="title">#条件設定</div>
-水深係数：<select id="a" name="a" onchange="calcr()">
-  <option value="3.0">3</option>
-  <option value="2.0">2</option>
-  <option value="1.5">1.5</option>
-</select><br>
-<!--建物長辺(m):<input type="number" id="B" name="B" min="6" max="42" value="42"/><br>-->
-建物短辺：<input type="number" id="D" name="D" min="6" max="100" value="42" onchange="calcr()"/>（許容浸水深表の範囲は6～42 m）<br>
-階数：<input type="number" id="N" name="N" min="2" max="110"  value="11" onchange="calcr()"/>（許容浸水深表の範囲は2～11階）<br>
-開口率：<select id="x" name="x" onchange="calcr()"> // 開口波力低減率
-  <option value="0.85">0.15</option>
-  <option value="0.70">0.3</option>
-</select><br>
+<div id='panel'>
+  <div id='left-panel'>
+  <div id='menu'>
+  <div class="title">#条件設定</div>
+  水深係数：<select id="a" name="a" onchange="calcr()">
+    <option value="3.0">3</option>
+    <option value="2.0">2</option>
+    <option value="1.5">1.5</option>
+  </select><br>
+  <!--建物長辺(m):<input type="number" id="B" name="B" min="6" max="42" value="42"/><br>-->
+  建物短辺：<input type="number" id="D" name="D" min="6" max="100" value="42" onchange="calcr()"/>（許容浸水深表の範囲は6～42 m）<br>
+  階数：<input type="number" id="N" name="N" min="2" max="110"  value="3" onchange="calcr()"/>（許容浸水深表の範囲は2～11階）<br>
+  開口率：<select id="x" name="x" onchange="calcr()"> // 開口波力低減率
+    <option value="0.85">0.15</option>
+    <option value="0.70">0.3</option>
+  </select><br>
 
-<!--
-<button onclick="calcr()">計算</button>
--->
+  <!--
+  <button onclick="calcr()">計算</button>
+  -->
 
+  </div>
+  <div id='shinsui'><div class="title">#浸水想定</div>
+      津波によって想定される浸水深： ---<br>
+      ※<a href="https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html#tsunami" target="_blank">ハザードマップポータルサイト</a>より
+  </div>
+  <div id='result'></div>
+  <div id='table'></div>
+  </div>
+  
+  <div id='right-panel'>
+  <div id='map'></div>
+  </div>
 </div>
-<div id='result'></div>
-<div id='table'></div>
+
 <div class='memo'>
 <div class="title">#ノート</div>
 ※倒壊限界、滑動限界の他、転倒限界もあるが、3次方程式を解く必要がある。
@@ -126,13 +167,15 @@ const getInputValues = () => {
 
 calcr = () => {
   const iv = getInputValues();
-  calc(iv.a, iv.B, iv.D, iv.N, iv.x);
+  const H = calc(iv.a, iv.B, iv.D, iv.N, iv.x);
   showTable(
     document.getElementById("a").value, 
     document.getElementById("x").value,
     iv.D, iv.N
   );
-
+  
+  return H;
+  
 };
 
 const calc = (a, B, D, N, x) => {
@@ -164,6 +207,11 @@ const calc = (a, B, D, N, x) => {
     <li>滑動限界 許容浸水深：<strong style="color:red;">${Math.floor(katsudoH*10)/10}</strong> [m]</li>
    <il>
   `;
+  
+  return {
+    tokaiH : calcTokai(val),
+    katsudoH : calcKatsudo(val)
+  };
   
 
 }
@@ -206,6 +254,248 @@ const calcKatsudo = (val) => {
     return h2;
   }
 }
+
+/*************************************************/
+/*Maplibre 関係設定                              */
+/*************************************************/
+const map = new maplibregl.Map({
+  container: 'map', // container id
+  hash: true, //add #position on URL
+  style: 'https://mghs15.github.io/styling-tools-for-gsi-optbv/basic.json', // stylesheet location
+  center: [139.78148, 35.768793], // starting position [lng, lat]
+  zoom: 9, // starting zoom
+  minZoom: 6,
+  maxZoom: 24,
+  attributionControl: false,
+  clickTolerance: 10,
+  localIdeographFontFamily: ['MS Gothic', 'Hiragino Kaku Gothic Pro', 'sans-serif']
+});
+
+
+map.addControl(new maplibregl.NavigationControl(), 'top-left');
+map.addControl(new maplibregl.ScaleControl() );
+map.addControl(new maplibregl.AttributionControl({compact: true}), 'top-right');
+
+map.showTileBoundaries = false;
+
+/*************************************************/
+/*PMTILES 関係設定                               */
+/*************************************************/
+let protocol = new pmtiles.Protocol();
+maplibregl.addProtocol("pmtiles",protocol.tile);
+
+/*************************************************/
+/*クリック 関係設定                              */
+/*************************************************/
+
+let isTrucking = false;
+let firstPoint;
+
+map.on('load', function() {
+  map.addSource('target-line', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: []
+    }
+  });
+  map.addLayer({
+    id: 'target-line',
+    type: 'line',
+    source: 'target-line',
+    paint: {
+      'line-width': 4,
+      'line-color': '#FF0000'
+    }
+  });
+  map.addLayer({
+    id: 'target-line-circle',
+    type: 'circle',
+    source: 'target-line',
+    paint: {
+      'circle-radius': 4,
+      'circle-color': '#FF0000'
+    }
+  });
+
+  map.addSource("hazardmap", {
+    "type": "raster",
+    "minzoom":2,
+    "maxzoom":17,
+    "tiles":["https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png"],
+    "tileSize": 256,
+    "attribution":"<a href='https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html' target='_blank'>重ねるハザードマップ</a>"
+  });
+  map.addLayer({ 
+    "id":"hazardmap",
+    "type":"raster",
+    "source":"hazardmap",
+    "paint":{
+      "raster-opacity": 0.5
+    }
+  }, "水域");
+
+  map.resize();
+});
+
+map.on('click', e => {
+  map.resize();
+  isTrucking = !isTrucking;
+  
+  if(isTrucking){
+    firstPoint = [e.lngLat.lng, e.lngLat.lat];
+  }else{
+    const endPoint = [e.lngLat.lng, e.lngLat.lat];
+    map.getSource('target-line').setData({
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          firstPoint, endPoint
+        ]
+      },
+      "properties": {}
+    });
+    
+    const dist = Math.floor( 
+      GSI.Utils.DistanceCalculator.calc(
+        {lng: firstPoint[0], lat: firstPoint[1]}, {lng: endPoint[0], lat: endPoint[1]}
+      )
+    );
+    
+    const cn = {
+      lng: (firstPoint[0] + endPoint[0])/2,
+      lat: (firstPoint[1] + endPoint[1])/2
+    };
+    
+    console.log(dist);
+    setCondition(dist, cn);
+    
+    firstPoint = [];
+  }
+});
+
+map.on('mousemove', e => {
+  if(isTrucking){
+    const endPoint = [e.lngLat.lng, e.lngLat.lat];
+    map.getSource('target-line').setData({
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          firstPoint, endPoint
+        ]
+      },
+      "properties": {}
+    });
+  }
+});
+
+
+
+const setCondition = (dist, cn) => {
+  document.getElementById("D").value = dist;
+  const H = calcr();
+  const h = getsetShinsui(cn);
+  
+  console.log(H, h); //非同期の関係で、このままでは h を取得できない。
+  
+  map.resize();
+}
+
+/*************************************************/
+/*津波浸水深 関係設定                            */
+/*************************************************/
+
+//Reference: Slippy map tilenames
+//https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
+const lon2tile = (lon,zoom) => { return (Math.floor((lon+180)/360*Math.pow(2,zoom))); }
+const lat2tile = (lat,zoom) => { return (Math.floor((1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,zoom))); }
+const lon2tiled = (lon,zoom) => { return ((lon+180)/360*Math.pow(2,zoom)); }
+const lat2tiled = (lat,zoom) => { return ((1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,zoom)); }
+
+//Reference: ハザードマップポータルサイト
+//https://disaportal.gsi.go.jp/hazardmap/maps/js/rasterUtil.js
+const tsunamiRasterColorSet = [
+  { r:220, g:122, b:220, max:99  ,note:"20.0m以上"     },
+  { r:242, g:133, b:201, max:20  ,note:"10.0m ～ 20.0m"},
+  { r:255, g:145, b:145, max:10  ,note:"5.0m ～ 10.0m" },
+  { r:255, g:183, b:183, max:5   ,note:"3.0m ～ 5.0m" },
+  { r:255, g:216, b:192, max:3   ,note:"0.5m ～ 3.0m" },
+  { r:248, g:225, b:166, max:1   ,note:"0.5m ～ 1.0m" },
+  { r:247, g:245, b:169, max:0.5 ,note:"0.5m未満" },
+  { r:255, g:255, b:179, max:0.3 ,note:"0.3m未満" }
+];
+
+const getsetShinsui = (cn, zl=17) => {
+  // cn = {lng: <number>, lat: <number>}
+  const xd = lon2tiled(cn.lng, zl);
+  const yd = lat2tiled(cn.lat, zl);
+  
+  const tilePos = {"x": xd, "y": yd};
+
+  const y = Math.floor(tilePos.y);
+  const pY = Math.floor((tilePos.y - y) * 256);
+  
+  const x = Math.floor(tilePos.x);
+  const pX = Math.floor((tilePos.x - x) * 256);
+  
+  const img = new Image(); 
+  img.crossOrigin = "Anonymous";
+  img.src = `https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/${zl}/${x}/${y}.png`;
+  
+  
+  img.onload = () => {
+  
+    const _canvas = document.createElement("canvas");
+    _canvas.width = 256;
+    _canvas.height = 256;
+    
+    const ctx = _canvas.getContext("2d");
+
+    ctx.drawImage(img, 0, 0);
+
+    const imgData = ctx.getImageData(0, 0, 256, 256);
+    const idx = (pY * 256 * 4) + (pX * 4);
+    const r = imgData.data[idx + 0];
+    const g = imgData.data[idx + 1];
+    const b = imgData.data[idx + 2];
+    let h = 0;
+    let note = "---";
+    
+    // 配色は津波浸水想定の手引きを参照
+    for(let i=0; i<tsunamiRasterColorSet.length; i++){
+      const info = tsunamiRasterColorSet[i];
+      if(r==info.r && g==info.g && b==info.b){
+        h = info.max;
+        note = info.note;
+      }
+    }
+    
+    document.getElementById("shinsui").innerHTML = `<div class="title">#浸水想定</div>
+      津波によって想定される浸水深： ${note}<br>
+      ※<a href="https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html#tsunami" target="_blank">ハザードマップポータルサイト</a>より
+    `;
+    
+    return h;
+  
+  }
+  
+  img.onerror = () => {
+  
+    document.getElementById("shinsui").innerHTML = `<div class="title">#浸水想定</div>
+      情報を取得できませんでした。
+      ※<a href="https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html#tsunami" target="_blank">ハザードマップポータルサイト</a>より
+    `;
+    
+    return 0;
+  
+  }
+  
+}
+
+
+
 
 /***********************************
 * 簡易表
@@ -377,7 +667,11 @@ const table = {
 };
 
 
-window.onload = calcr();
+window.onload = () => {
+  map.resize();
+  calcr();
+}
+
 </script>
 
 </body>
