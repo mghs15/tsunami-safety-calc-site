@@ -328,6 +328,13 @@ map.on('load', function() {
     "attribution":"<a href='https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html' target='_blank'>重ねるハザードマップ</a>"
   });
   map.addLayer({ 
+    "id":"hazardmap-background",
+    "type":"background",
+    "paint":{
+      "background-color": "#FFFFFF"
+    }
+  }, "水域");
+  map.addLayer({ 
     "id":"hazardmap",
     "type":"raster",
     "source":"hazardmap",
