@@ -17,7 +17,7 @@ body {
 #panel {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-gap: 4px;
+  grid-gap: 8px;
 }
 
 @media screen and (max-width: 640px) {
@@ -46,8 +46,10 @@ body {
   padding: 4px;
   background-color: #EEFFFF;
 }
-#table table{
+#table{
   margin: 4px;
+}
+#table table{
   border-collapse: collapse;
 }
 #table td, #table th {
@@ -202,10 +204,9 @@ const calc = (a, B, D, N, x) => {
   const tokaiH = calcTokai(val);
   const katsudoH = calcKatsudo(val);
   
-  document.getElementById("result").innerHTML = `<div class="title">#許容浸水深</div><ul>
-    <li>倒壊限界 許容浸水深：${Math.floor(tokaiH  *10)/10} [m]</li>
-    <li>滑動限界 許容浸水深：<strong style="color:red;">${Math.floor(katsudoH*10)/10}</strong> [m]</li>
-   <il>
+  document.getElementById("result").innerHTML = `<div class="title">#許容浸水深</div>
+    倒壊限界 許容浸水深：${Math.floor(tokaiH  *10)/10} [m]<br>
+    滑動限界 許容浸水深：<strong style="color:red;">${Math.floor(katsudoH*10)/10}</strong> [m]
   `;
   
   return {
@@ -346,6 +347,19 @@ map.on('click', e => {
     firstPoint = [e.lngLat.lng, e.lngLat.lat];
   }else{
     const endPoint = [e.lngLat.lng, e.lngLat.lat];
+    
+    const dist = Math.floor( 
+      GSI.Utils.DistanceCalculator.calc(
+        {lng: firstPoint[0], lat: firstPoint[1]}, {lng: endPoint[0], lat: endPoint[1]}
+      )
+    );
+    console.log(dist);
+    
+    const cn = {
+      lng: (firstPoint[0] + endPoint[0])/2,
+      lat: (firstPoint[1] + endPoint[1])/2
+    };
+    
     map.getSource('target-line').setData({
       "type": "Feature",
       "geometry": {
@@ -354,21 +368,11 @@ map.on('click', e => {
           firstPoint, endPoint
         ]
       },
-      "properties": {}
+      "properties": {
+        "dist": dist
+      }
     });
     
-    const dist = Math.floor( 
-      GSI.Utils.DistanceCalculator.calc(
-        {lng: firstPoint[0], lat: firstPoint[1]}, {lng: endPoint[0], lat: endPoint[1]}
-      )
-    );
-    
-    const cn = {
-      lng: (firstPoint[0] + endPoint[0])/2,
-      lat: (firstPoint[1] + endPoint[1])/2
-    };
-    
-    console.log(dist);
     setCondition(dist, cn);
     
     firstPoint = [];
@@ -395,6 +399,7 @@ map.on('mousemove', e => {
 
 const setCondition = (dist, cn) => {
   document.getElementById("D").value = dist;
+  
   const H = calcr();
   const h = getsetShinsui(cn);
   
