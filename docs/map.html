@@ -20,12 +20,54 @@ body {
   grid-gap: 8px;
 }
 
+#left-panel {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+#right-panel {
+  grid-row: 1;
+  grid-column: 2;
+  position: relative;
+}
+
+#right-panel-info {
+  grid-row: 1;
+  grid-column: 2;
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  text-align: right;
+  margin: 4px;
+}
+
 @media screen and (max-width: 640px) {
   #panel {
     display: grid;
-  grid-template-columns: 1fr;
+    grid-template-columns: 1fr;
     grid-template-rows: auto 300px;
     grid-gap: 4px;
+  }
+  
+  #left-panel {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  
+  #right-panel {
+    grid-row: 2;
+    grid-column: 1;
+    position: relative;
+  }
+  
+  #right-panel-info {
+    grid-row: 2;
+    grid-column: 1;
+    position: absolute;
+    bottom: 0px;
+    right: 0px;
+    text-align: right;
+    margin: 4px;
   }
 }
 
@@ -33,6 +75,11 @@ body {
   position: relative;
   height: 100%;
   width: 100%;
+}
+
+#map-info-width, #map-info-depth {
+  pointer-events: none;
+  background-color: #FFFFFFAA;
 }
 
 #menu {
@@ -116,6 +163,11 @@ div.title {
   
   <div id='right-panel'>
   <div id='map'></div>
+  <div id='right-panel-info'>
+    <div id='map-info-width'></div>
+    <div id='map-info-depth'></div>
+    <button onclick="switchPhoto()">写真 表示/非表示</button>
+  </div>
   </div>
 </div>
 
@@ -293,6 +345,51 @@ let isTrucking = false;
 let firstPoint;
 
 map.on('load', function() {
+
+  map.addSource("hazardmap", {
+    "type": "raster",
+    "minzoom":2,
+    "maxzoom":17,
+    "tiles":["https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png"],
+    "tileSize": 256,
+    "attribution":"<a href='https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html' target='_blank'>重ねるハザードマップ</a>"
+  });
+  map.addLayer({ 
+    "id":"hazardmap-background",
+    "type":"background",
+    "paint":{
+      "background-color": "#FFFFFF"
+    }
+  }, "水域");
+  map.addLayer({ 
+    "id":"hazardmap",
+    "type":"raster",
+    "source":"hazardmap",
+    "paint":{
+      "raster-opacity": 1
+    }
+  }, "水域");
+
+  map.addSource("photo", {
+    "type": "raster",
+    "minzoom":2,
+    "maxzoom":17,
+    "tiles":["https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg"],
+    "tileSize": 256,
+    "attribution":"<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>地理院タイル</a>"
+  });
+  map.addLayer({ 
+    "id":"photo",
+    "type":"raster",
+    "source":"photo",
+    "paint":{
+      "raster-opacity": 0.8
+    },
+    "layout": {
+      "visibility": "visible"
+    }
+  });
+  
   map.addSource('target-line', {
     type: 'geojson',
     data: {
@@ -318,33 +415,19 @@ map.on('load', function() {
       'circle-color': '#FF0000'
     }
   });
-
-  map.addSource("hazardmap", {
-    "type": "raster",
-    "minzoom":2,
-    "maxzoom":17,
-    "tiles":["https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png"],
-    "tileSize": 256,
-    "attribution":"<a href='https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html' target='_blank'>重ねるハザードマップ</a>"
-  });
-  map.addLayer({ 
-    "id":"hazardmap-background",
-    "type":"background",
-    "paint":{
-      "background-color": "#FFFFFF"
-    }
-  }, "水域");
-  map.addLayer({ 
-    "id":"hazardmap",
-    "type":"raster",
-    "source":"hazardmap",
-    "paint":{
-      "raster-opacity": 0.5
-    }
-  }, "水域");
-
+  
   map.resize();
 });
+
+const switchPhoto = () => {
+  const layerId = "photo";
+  const visibility = map.getLayoutProperty(layerId, 'visibility')
+  if (visibility === 'visible') {
+    map.setLayoutProperty(layerId, 'visibility', 'none');
+  }else{
+    map.setLayoutProperty(layerId, 'visibility', 'visible');
+  }
+}
 
 map.on('click', e => {
   map.resize();
@@ -361,6 +444,7 @@ map.on('click', e => {
       )
     );
     console.log(dist);
+    
     
     const cn = {
       lng: (firstPoint[0] + endPoint[0])/2,
@@ -380,6 +464,8 @@ map.on('click', e => {
       }
     });
     
+    document.getElementById("map-info-width").innerHTML = `建物幅： ${dist} m`;
+    
     setCondition(dist, cn);
     
     firstPoint = [];
@@ -389,6 +475,13 @@ map.on('click', e => {
 map.on('mousemove', e => {
   if(isTrucking){
     const endPoint = [e.lngLat.lng, e.lngLat.lat];
+    
+    const dist = Math.floor( 
+      GSI.Utils.DistanceCalculator.calc(
+        {lng: firstPoint[0], lat: firstPoint[1]}, {lng: endPoint[0], lat: endPoint[1]}
+      )
+    );
+    
     map.getSource('target-line').setData({
       "type": "Feature",
       "geometry": {
@@ -399,6 +492,9 @@ map.on('mousemove', e => {
       },
       "properties": {}
     });
+    
+    document.getElementById("map-info-width").innerHTML = `建物幅： ${dist} m`;
+    
   }
 });
 
@@ -408,6 +504,7 @@ const setCondition = (dist, cn) => {
   document.getElementById("D").value = dist;
   
   const H = calcr();
+  
   const h = getsetShinsui(cn);
   
   console.log(H, h); //非同期の関係で、このままでは h を取得できない。
@@ -488,6 +585,7 @@ const getsetShinsui = (cn, zl=17) => {
       津波によって想定される浸水深： ${note}<br>
       ※<a href="https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html#tsunami" target="_blank">ハザードマップポータルサイト</a>より
     `;
+    document.getElementById("map-info-depth").innerHTML = `浸水深： ${note}`;
     
     return h;
   
@@ -496,9 +594,10 @@ const getsetShinsui = (cn, zl=17) => {
   img.onerror = () => {
   
     document.getElementById("shinsui").innerHTML = `<div class="title">#浸水想定</div>
-      情報を取得できませんでした。<br>
+      津波によって想定される浸水深： ---<br>
       ※<a href="https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html#tsunami" target="_blank">ハザードマップポータルサイト</a>より
     `;
+    document.getElementById("map-info-depth").innerHTML = `浸水深： ---`;
     
     return 0;
   
