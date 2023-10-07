@@ -50,7 +50,11 @@ div.title {
 
 <div class='memo'>
 本サイトは国土交通省住宅局の事務連絡「<a href="https://www.mlit.go.jp/sogoseisaku/point/content/001397830.pdf" target="_blank">許容浸水深表による津波に対する安全性を確かめる方法について</a>」
-を参照して作成したものである。実際に津波に対する安全性を確かめる際は、当該事務連絡を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。<br>
+を参照して作成したものである。実際に津波に対する安全性を確かめる際は、当該事務連絡を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。
+<br>
+<strong style="color:red;">転倒限界については、波圧が建物を超える場合で、許容浸水表の値と誤差が生じている</strong>
+（最終的には滑動限界の結果で決まるため、最終的な許容浸水深には影響していない模様）。
+<br>
 <a href="./map.html" target="_blank">地図で建物の大きさと比較する</a>
 <div>
 
@@ -78,14 +82,17 @@ div.title {
 <div id='table'></div>
 <div class='memo'>
 <div class="title">#ノート</div>
-※倒壊限界、滑動限界の他、転倒限界もあるが、3次方程式を解く必要がある。
+<ul><li>
+倒壊限界の数値が一部許容浸水深表の値に合わない場合がある（安全側に0.1 m ずれる）。
+</li><li>
+<strong style="color:red;">転倒限界については、波圧が建物を超える場合で、許容浸水表の値と誤差が生じている</strong>（安全側にずれる）。
+</li><li>
 事務連絡別紙によれば、開口率0.3において、『表中で検討した条件範囲(建物階数 3F～11Ｆ，建物幅の最小値 (6m～42m)では
-いずれの水深係数の検討においても滑動限界浸水深を条件とした限界浸水深によって許容浸水深が決定した』とのことなので省略している。
+いずれの水深係数の検討においても滑動限界浸水深を条件とした限界浸水深によって許容浸水深が決定した』とのこと。
 （ただし、開口率0.15においても滑動限界浸水深により決定されるかは明言されていない。本サイトでも開口率0.15の場合を検証しているわけではないので、改めて水深表での確認が必要。）
-<br>
-※倒壊限界の数値が一部許容浸水深表の表に合わない場合がある（安全側に0.1 m ずれる）。
-<br>
-※長辺は、津波の作用（津波水平力等）と建物の耐力（滑動耐力等）の両方に寄与するので打ち消し合い、結果として、建物の安全性としては短辺の寄与だけが残るようである。
+</li><li>
+長辺は、津波の作用（津波水平力等）と建物の耐力（滑動耐力等）の両方に寄与するので打ち消し合い、結果として、建物の安全性としては短辺の寄与だけが残るようである。
+</li></ul>
 <div>
 
 
@@ -158,12 +165,27 @@ const calc = (a, B, D, N, x) => {
   
   const tokaiH = calcTokai(val);
   const katsudoH = calcKatsudo(val);
+  const tentouH = calcTentou(val);
   
-  document.getElementById("result").innerHTML = `<div class="title">#許容浸水深</div><ul>
-    <li>倒壊限界 許容浸水深：${Math.floor(tokaiH  *10)/10} [m]</li>
-    <li>滑動限界 許容浸水深：<strong style="color:red;">${Math.floor(katsudoH*10)/10}</strong> [m]</li>
-   <il>
+  const tentouStr = val.NH > tentouH*val.a 
+                  ? `${Math.floor(tentouH*10)/10} [m]` 
+                  : `<span style="color:grey;">（参考値 ${Math.floor(tentouH*10)/10} [m] ※許容浸水表と異なる可能性）</span>`;
+  
+  document.getElementById("result").innerHTML = `<div class="title">#許容浸水深</div>
+    （建物高さ： ${val.N * val.H} [m]）
+    <br>
+    倒壊限界 許容浸水深：${Math.floor(tokaiH  *10)/10} [m]
+    <br>
+    滑動限界 許容浸水深：<strong style="color:red;">${Math.floor(katsudoH*10)/10}</strong> [m]
+    <br>
+    転倒限界 許容浸水深：${ tentouStr } 
   `;
+  
+  return {
+    tokaiH : tokaiH,
+    katsudoH : katsudoH,
+    tentouH : tentouH
+  };
   
 
 }
@@ -205,6 +227,78 @@ const calcKatsudo = (val) => {
   }else{
     return h2;
   }
+}
+
+const calcTentou = (val) => {
+  
+  // 建物高さが波圧高さを上回る場合
+  const _a1 = (val.a**3)*val.r*val.x;
+  const _c1 = 3*(val.D**2)*val.r;
+  const _d1 = - 3*(val.D**2)*val.w*(val.N+1);
+  const _p = _c1/_a1;
+  const _q = _d1/_a1;
+  
+  // const d1 = _a1 * (h**3) + _c1 * h + _d1;
+  
+  // 三次方程式の解のうち、一般解
+  const _P11 = -(_q/2) + Math.sqrt( ((_q/2)**2) + ((_p/3)**3) );
+  const _P12 = -(_q/2) - Math.sqrt( ((_q/2)**2) + ((_p/3)**3) );
+  
+  const h1 = Math.cbrt( _P11) + Math.cbrt( _P12);
+           
+  // 波圧高さが建物高さを上回る場合 
+  const _a = ( 6*val.r*(val.N**2)*(val.H**2)*val.x*(val.a**2)
+              +6*(val.D**2)*val.r*val.a );
+  const _b = - ( 7*val.r*(val.N**3)*(val.H**3)*val.a*val.x
+               +6*(val.D**2)*val.w*(val.N+1)*val.a
+               +3*val.r*(val.D**2)*val.N*val.H );
+  const _c = 2*val.r*(val.N**4)*(val.H**4)*val.x
+           + 3*(val.D**2)*val.w*(val.N+1)*val.N*val.H;
+  
+  // const d2 = _a * (h**2)  + _b * h + _c;
+  
+  /***********************************************************************
+   * 安全な領域は、d2 < 0（津波モーメント < 転倒耐力）となるような h。
+   * h が大きくなるにつれて、 d2 > 0 となる時点の h が許容限界のため、
+   * 二次方程式の解のうち、大きい方を採用する。
+  ************************************************************************/
+  const h2 = ( -_b + Math.sqrt((_b**2)-(4*_a*_c)) ) / (2*_a);
+  const h2other = ( -_b - Math.sqrt((_b**2)-(4*_a*_c)) ) / (2*_a);
+  //console.log(h2, h2other);
+  
+  /**************
+   確認用にグラフ作成用のデータを作成する
+  **************/
+  let checkData = "${bunki} ${h1} ${h2} ${h} ${d1} ${d2} ${d}" + "\n";
+  
+  // 近似的に解を求める
+  for(let i=0; i<val.NH*10; i++){
+    
+    const h = i/10;
+    
+    // 建物高さが波圧高さを上回る場合
+    const d1 = _a1 * (h**3) + _c1 * h + _d1;
+    // 波圧高さが建物高さを上回る場合 
+    const d2 = _a * (h**2)  + _b * h + _c;
+    
+    const bunki = h * val.a < val.NH ? 1 : 0;
+    const d = h * val.a < val.NH ? d1 : d2;
+    checkData += `${bunki} ${h1} ${h2} ${h} ${d1} ${d2} ${d}` + "\n";
+    
+  }
+  
+  console.log(checkData);
+  /*************/
+
+  if(h1 * val.a < val.NH){
+    console.log("1 建物高さより低い波圧", h1*val.a < val.NH, h1);
+    return h1;
+  }else{
+    console.log("2 建物高さを上回る波圧", h2*val.a > val.NH, h2);
+    console.log("* 別の解の検証", h2other, val.NH, h2other*val.a > val.NH);
+    return h2;
+  }
+  
 }
 
 /***********************************
