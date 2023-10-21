@@ -35,7 +35,7 @@ body {
   grid-row: 1;
   grid-column: 2;
   position: absolute;
-  bottom: 0px;
+  top: 0px;
   right: 0px;
   text-align: right;
   margin: 4px;
@@ -167,9 +167,9 @@ div.title {
   <div id='right-panel'>
   <div id='map'></div>
   <div id='right-panel-info'>
+    <button onclick="switchPhoto()">写真 表示/非表示</button>
     <div id='map-info-width'></div>
     <div id='map-info-depth'></div>
-    <button onclick="switchPhoto()">写真 表示/非表示</button>
   </div>
   </div>
 </div>
@@ -416,7 +416,7 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), 'top-left');
 map.addControl(new maplibregl.ScaleControl() );
-map.addControl(new maplibregl.AttributionControl({compact: true}), 'top-right');
+map.addControl(new maplibregl.AttributionControl({compact: true}), 'bottom-right');
 
 map.showTileBoundaries = false;
 
