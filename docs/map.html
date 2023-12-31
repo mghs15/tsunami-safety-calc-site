@@ -7,6 +7,7 @@
 <script src='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js'></script>
 <link href='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css' rel='stylesheet' />
 <script src="https://unpkg.com/pmtiles@2.5.0/dist/index.js"></script>
+<script src="./getRasterTilePixel.js"></script>
 <script src="./measure.js"></script>
 <style>
 body { 
@@ -103,6 +104,9 @@ body {
   border: solid 1px #000000;
   width: 3em;
 }
+#table td {
+  text-align: right;
+}
 
 #table .highlighted {
   background-color: #EEEEFF;
@@ -128,7 +132,8 @@ div.title {
 
 <div class='memo'>
 本サイトは国土交通省住宅局の事務連絡「<a href="https://www.mlit.go.jp/sogoseisaku/point/content/001397830.pdf" target="_blank">許容浸水深表による津波に対する安全性を確かめる方法について</a>」
-を参照して作成したものである。実際に津波に対する安全性を確かめる際は、当該事務連絡を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。
+を参照して作成したものである（<a href="https://www.mlit.go.jp/sogoseisaku/point/tsunamibousai.html" target="_blank">その他参考資料</a>）。
+実際に津波に対する安全性を確かめる際は、当該事務連絡等を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。
 <br>
 <strong style="color:red;">転倒限界については、波圧が建物を超える場合で、許容浸水表の値と誤差が生じている</strong>
 （最終的には滑動限界の結果で決まるため、最終的な許容浸水深には影響していない模様）。
@@ -594,9 +599,10 @@ const setCondition = (dist, cn) => {
   
   const H = calcr();
   
-  const h = getsetShinsui(cn);
-  
-  console.log(H, h); //非同期の関係で、このままでは h を取得できない。
+  getsetShinsui(cn)
+  .then((h) => {
+    console.log(H, h); //非同期の関係で、このままでは h を取得できない。
+  });
   
   map.resize();
 }
@@ -605,61 +611,36 @@ const setCondition = (dist, cn) => {
 /*津波浸水深 関係設定                            */
 /*************************************************/
 
-//Reference: Slippy map tilenames
-//https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-const lon2tile = (lon,zoom) => { return (Math.floor((lon+180)/360*Math.pow(2,zoom))); }
-const lat2tile = (lat,zoom) => { return (Math.floor((1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,zoom))); }
-const lon2tiled = (lon,zoom) => { return ((lon+180)/360*Math.pow(2,zoom)); }
-const lat2tiled = (lat,zoom) => { return ((1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,zoom)); }
-
 //Reference: ハザードマップポータルサイト
 //https://disaportal.gsi.go.jp/hazardmap/maps/js/rasterUtil.js
 const tsunamiRasterColorSet = [
-  { r:220, g:122, b:220, max:99  ,note:"20.0m以上"     },
-  { r:242, g:133, b:201, max:20  ,note:"10.0m ～ 20.0m"},
-  { r:255, g:145, b:145, max:10  ,note:"5.0m ～ 10.0m" },
-  { r:255, g:183, b:183, max:5   ,note:"3.0m ～ 5.0m" },
-  { r:255, g:216, b:192, max:3   ,note:"0.5m ～ 3.0m" },
-  { r:248, g:225, b:166, max:1   ,note:"0.5m ～ 1.0m" },
-  { r:247, g:245, b:169, max:0.5 ,note:"0.5m未満" },
-  { r:255, g:255, b:179, max:0.3 ,note:"0.3m未満" }
+  { r:220, g:122, b:220, max:99 , note:"20.0m以上"     },
+  { r:242, g:133, b:201, max:20 , note:"10.0m ～ 20.0m"},
+  { r:255, g:145, b:145, max:10 , note:"5.0m ～ 10.0m" },
+  { r:255, g:183, b:183, max:5  , note:"3.0m ～ 5.0m"  },
+  { r:255, g:216, b:192, max:3  , note:"0.5m ～ 3.0m"  },
+  { r:248, g:225, b:166, max:1  , note:"0.5m ～ 1.0m"  },
+  { r:247, g:245, b:169, max:0.5, note:"0.5m未満"      },
+  { r:255, g:255, b:179, max:0.3, note:"0.3m未満"      }
 ];
 
-const getsetShinsui = (cn, zl=17) => {
-  // cn = {lng: <number>, lat: <number>}
-  const xd = lon2tiled(cn.lng, zl);
-  const yd = lat2tiled(cn.lat, zl);
-  
-  const tilePos = {"x": xd, "y": yd};
+const getsetShinsui = (cn) => {
 
-  const y = Math.floor(tilePos.y);
-  const pY = Math.floor((tilePos.y - y) * 256);
+  const tileUrl = `https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png`;
   
-  const x = Math.floor(tilePos.x);
-  const pX = Math.floor((tilePos.x - x) * 256);
+  // 初期化
+  let note = "---";
+  let h;
+  document.getElementById("shinsui").innerHTML = `<div class="title">#浸水想定</div>
+    津波によって想定される浸水深： 取得中<br>
+    ※<a href="https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html#tsunami" target="_blank">ハザードマップポータルサイト</a>より
+  `;
+  document.getElementById("map-info-depth").innerHTML = `浸水深： 取得中`;
   
-  const img = new Image(); 
-  img.crossOrigin = "Anonymous";
-  img.src = `https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/${zl}/${x}/${y}.png`;
   
-  
-  img.onload = () => {
-  
-    const _canvas = document.createElement("canvas");
-    _canvas.width = 256;
-    _canvas.height = 256;
-    
-    const ctx = _canvas.getContext("2d");
-
-    ctx.drawImage(img, 0, 0);
-
-    const imgData = ctx.getImageData(0, 0, 256, 256);
-    const idx = (pY * 256 * 4) + (pX * 4);
-    const r = imgData.data[idx + 0];
-    const g = imgData.data[idx + 1];
-    const b = imgData.data[idx + 2];
-    let h = 0;
-    let note = "---";
+  // データの取得・表示
+  return getRasterTilePixel(cn, 17, tileUrl, {})
+  .then(({r, g, b}) => {
     
     // 配色は津波浸水想定の手引きを参照
     for(let i=0; i<tsunamiRasterColorSet.length; i++){
@@ -676,25 +657,28 @@ const getsetShinsui = (cn, zl=17) => {
     `;
     document.getElementById("map-info-depth").innerHTML = `浸水深： ${note}`;
     
-    return h;
-  
-  }
-  
-  img.onerror = () => {
-  
+    return Promise.resolve(h);
+
+    
+    /*
+    return new Promise((resolve, reject) => {
+      resolve(h);
+    });
+    */
+    
+  })
+  .catch((err) => {
+    
+    console.error(err);
+    
     document.getElementById("shinsui").innerHTML = `<div class="title">#浸水想定</div>
-      津波によって想定される浸水深： ---<br>
+      津波によって想定される浸水深： ${note}<br>
       ※<a href="https://disaportal.gsi.go.jp/hazardmapportal/hazardmap/copyright/opendata.html#tsunami" target="_blank">ハザードマップポータルサイト</a>より
     `;
-    document.getElementById("map-info-depth").innerHTML = `浸水深： ---`;
-    
-    return 0;
+    document.getElementById("map-info-depth").innerHTML = `浸水深： ${note}`;
   
-  }
-  
+  });
 }
-
-
 
 
 /***********************************
