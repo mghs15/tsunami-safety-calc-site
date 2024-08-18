@@ -50,10 +50,8 @@ div.title {
 
 <div class='memo'>
 本サイトは国土交通省住宅局の事務連絡「<a href="https://www.mlit.go.jp/sogoseisaku/point/content/001397830.pdf" target="_blank">許容浸水深表による津波に対する安全性を確かめる方法について</a>」
-を参照して作成したものである。実際に津波に対する安全性を確かめる際は、当該事務連絡を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。
-<br>
-<strong style="color:red;">転倒限界については、波圧が建物を超える場合で、許容浸水表の値と誤差が生じている</strong>
-（最終的には滑動限界の結果で決まるため、最終的な許容浸水深には影響していない模様）。
+を参照して作成したものである（<a href="https://www.mlit.go.jp/sogoseisaku/point/tsunamibousai.html" target="_blank">その他参考資料</a>）。
+実際に津波に対する安全性を確かめる際は、当該事務連絡等を参照すること（本サイトは、試験的な実装のため、誤りがある可能性がある）。
 <br>
 <a href="./map.html" target="_blank">地図で建物の大きさと比較する</a>
 <div>
@@ -85,7 +83,8 @@ div.title {
 <ul><li>
 倒壊限界の数値が一部許容浸水深表の値に合わない場合がある（安全側に0.1 m ずれる）。
 </li><li>
-<strong style="color:red;">転倒限界については、波圧が建物を超える場合で、許容浸水表の値と誤差が生じている</strong>（安全側にずれる）。
+<del>転倒限界については、波圧が建物を超える場合で、許容浸水表の値と誤差が生じている（安全側にずれる）。</del><br>
+<ins>本件、<a href="https://www.kenchiku-bosai.or.jp/files/2024/03/tsunami-bessi-seigo0403.pdf">資料に誤りがあった旨公表されている</a>。</ins>
 </li><li>
 事務連絡別紙によれば、開口率0.3において、『表中で検討した条件範囲(建物階数 3F～11Ｆ，建物幅の最小値 (6m～42m)では
 いずれの水深係数の検討においても滑動限界浸水深を条件とした限界浸水深によって許容浸水深が決定した』とのこと。
@@ -169,7 +168,7 @@ const calc = (a, B, D, N, x) => {
   
   const tentouStr = val.NH > tentouH*val.a 
                   ? `${Math.floor(tentouH*10)/10} [m]` 
-                  : `<span style="color:grey;">（参考値 ${Math.floor(tentouH*10)/10} [m] ※許容浸水表と異なる可能性）</span>`;
+                  : `<span>${Math.floor(tentouH*10)/10} [m]</span>`;
   
   document.getElementById("result").innerHTML = `<div class="title">#許容浸水深</div>
     （建物高さ： ${val.N * val.H} [m]）
